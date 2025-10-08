@@ -20,7 +20,7 @@ jobs:
       uses: zaproxy/action-baseline@v0.10.0
       with:
         target: 'https://nextjs-boilerplate-mu-lilac-67.vercel.app/'
-        cmd_options: '-a -J report_json.json'
+        cmd_options: '-a -J report-json.json'
         allow_issue_writing: 'false'
         token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -28,7 +28,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: zap-json-report
-        path: report_json.json
+        path: report-json.json
         retention-days: 30
         
     - name: Display Scan Summary
