@@ -1,20 +1,20 @@
-name: OWASP ZAP DAST security scan
-on: [ push ]
+name: OWASP ZAP Security Scan
+
+on:
+  push:
+    branches: [main]
 
 jobs:
-
-  zap_scan:
+  security-scan:
     runs-on: ubuntu-latest
-    name: Run DAST scan on the web application
+    
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          ref: master
-      - name: ZAP Scan
-        uses: zaproxy/action-baseline@v0.6.1
-        with:
-          docker_name: 'owasp/zap2docker-stable'
-          target: 'http://testphp.vulnweb.com/'
-          rules_file_name: '.zap/rules.tsv'
-          cmd_options: '-a'
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: ZAP Scan
+      uses: zaproxy/action-baseline@v0.10.0
+      with:
+        target: 'https://nextjs-boilerplate-mu-lilac-67.vercel.app/'
+        cmd_options: '-a -I'
+        token: ${{ secrets.GITHUB_TOKEN }}
