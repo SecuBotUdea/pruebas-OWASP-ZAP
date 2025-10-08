@@ -30,16 +30,3 @@ jobs:
         name: zap-json-report
         path: report-json.json
         retention-days: 30
-        
-    - name: Display Scan Summary
-      run: |
-        echo "ZAP Scan completed"
-        if [ -f report_json.json ]; then
-          echo "JSON report generated successfully"
-          # Puedes agregar aquí procesamiento básico del JSON si lo necesitas
-          # Por ejemplo, contar vulnerabilidades:
-          ALERTS=$(jq '.site[0].alerts | length' report_json.json 2>/dev/null || echo "0")
-          echo "Total alerts found: $ALERTS"
-        else
-          echo "JSON report not found"
-        fi
