@@ -20,7 +20,7 @@ jobs:
       uses: zaproxy/action-baseline@v0.10.0
       with:
         target: 'https://nextjs-boilerplate-mu-lilac-67.vercel.app/'
-        cmd_options: '-a -J report_json.json -I'
+        cmd_options: '-a -J report_json.json'
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload JSON Report
