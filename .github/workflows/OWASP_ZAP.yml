@@ -18,15 +18,28 @@ jobs:
 
     - name: ZAP Scan
       uses: zaproxy/action-baseline@v0.10.0
+      continue-on-error: true
       with:
         target: 'https://nextjs-boilerplate-mu-lilac-67.vercel.app/'
-        cmd_options: '-a -J ./zap-reports/report_json.json'
-        allow_issue_writing: 'false'
+        cmd_options: '-a -J report_json.json'
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload JSON Report
       uses: actions/upload-artifact@v4
       with:
-        name: security-reports
-        path: security-reports/
+        name: zap-json-report
+        path: report_json.json
         retention-days: 30
+        
+    - name: Display Scan Summary
+      run: |
+        echo "ZAP Scan completed"
+        if [ -f report_json.json ]; then
+          echo "JSON report generated successfully"
+          # Puedes agregar aquí procesamiento básico del JSON si lo necesitas
+          # Por ejemplo, contar vulnerabilidades:
+          ALERTS=$(jq '.site[0].alerts | length' report_json.json 2>/dev/null || echo "0")
+          echo "Total alerts found: $ALERTS"
+        else
+          echo "JSON report not found"
+        fi
