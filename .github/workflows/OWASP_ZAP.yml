@@ -18,11 +18,10 @@ jobs:
 
     - name: ZAP Scan
       uses: zaproxy/action-baseline@v0.10.0
-      continue-on-error: true
       with:
         target: 'https://nextjs-boilerplate-mu-lilac-67.vercel.app/'
         cmd_options: '-a -J report_json.json'
-        create_issue: 'false'
+        allow_issue_writing: 'false'
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload JSON Report
