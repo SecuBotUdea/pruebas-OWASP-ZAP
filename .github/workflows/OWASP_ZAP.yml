@@ -31,3 +31,27 @@ jobs:
         path: report_json.json
         retention-days: 30
         overwrite: true
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+      
+    - name: Install dependencies
+      run: |
+        pip install requests
+      
+    - name: Normalize ZAP Report
+      run: python scripts/normalize_zap_report.py
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      # OPCIONAL: Subir reporte normalizado
+    - name: Upload Normalized Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: normalized-report
+        path: normalized_report.json
+        retention-days: 30
+
+
