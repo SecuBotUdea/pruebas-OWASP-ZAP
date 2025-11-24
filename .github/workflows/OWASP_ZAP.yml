@@ -1,9 +1,7 @@
 name: OWASP ZAP Security Scan
-
 on:
   push:
     branches: [main]
-
 jobs:
   security-scan:
     runs-on: ubuntu-latest
@@ -15,7 +13,7 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-
+    
     - name: ZAP Scan
       uses: zaproxy/action-baseline@v0.10.0
       continue-on-error: true
@@ -23,7 +21,7 @@ jobs:
         target: 'https://nextjs-boilerplate-mu-lilac-67.vercel.app/'
         cmd_options: '-a -J report_json.json'
         token: ${{ secrets.GITHUB_TOKEN }}
-
+    
     - name: Upload JSON Report
       uses: actions/upload-artifact@v4
       with:
@@ -31,7 +29,7 @@ jobs:
         path: report_json.json
         retention-days: 30
         overwrite: true
-
+    
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
@@ -40,18 +38,35 @@ jobs:
     - name: Install dependencies
       run: |
         pip install requests
-      
+    
+    - name: Convert JSON to SARIF
+      run: |
+        python scripts/convert_zap_to_sarif.py report_json.json zap_results.sarif
+    
+    - name: Upload SARIF to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v4
+      if: always()
+      with:
+        sarif_file: zap_results.sarif
+        category: owasp-zap
+    
+    - name: Upload SARIF Report as artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: zap-sarif-report
+        path: zap_results.sarif
+        retention-days: 30
+    
     - name: Normalize ZAP Report
       run: python scripts/normalize_zap_report.py
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      # OPCIONAL: Subir reporte normalizado
     - name: Upload Normalized Report
       uses: actions/upload-artifact@v4
       with:
         name: normalized-report
         path: normalized_report.json
         retention-days: 30
-
 
