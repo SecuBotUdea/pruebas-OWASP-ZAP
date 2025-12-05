@@ -1,55 +1,173 @@
-name: CI/CD Github Actions
-on: [ push ]
-env: 
-    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-    VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-    VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+name: OWASP ZAP Security Scan
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * 0'  # Ejecutar semanalmente
+  workflow_dispatch:
+
 jobs:
-    build:
-        name: Build and Deploy
-        runs-on: ubuntu-latest
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
-        steps:
-          - uses: actions/checkout@v3
-          - name: Use Node.js 18
-            uses: actions/setup-node@v3
-            with:
-                node-version: '18'
-          - name: Install dependencies
-            run: npm install
-          - name: Build project
-            run: npm run build
-    Deploy-Dev:
-        name: Deploy to Vercel (Development)
-        needs: build
-        runs-on: ubuntu-latest
-        if: github.ref == 'refs/heads/dev'
-        steps:
-          - uses: actions/checkout@v3
-          - name: Use Node.js 18
-            uses: actions/setup-node@v3
-            with:
-                node-version: '18'
-          - name: Install vercel cli
-            run: npm install --global vercel@latest
-          - name: Pull vercel Enviromental Variables
-            run: vercel pull --yes --token=${{ secrets.VERCEL_TOKEN }}
-          - name: Trigger Vercel Deployment
-            run: vercel deploy --no-wait --token=${{ secrets.VERCEL_TOKEN }}
-    Deploy-Production:
-        name: Deploy to Vercel (Production)
-        needs: build
-        runs-on: ubuntu-latest
-        if: github.ref == 'refs/heads/main'
-        steps:
-          - uses: actions/checkout@v3
-          - name: Use Node.js 18
-            uses: actions/setup-node@v3
-            with:
-                node-version: '18'
-          - name: Install vercel cli
-            run: npm install --global vercel@latest
-          - name: Pull vercel Enviromental Variables
-            run: vercel pull --yes --token=${{ secrets.VERCEL_TOKEN }}
-          - name: Trigger Vercel Deployment
-            run: vercel deploy --prod --no-wait --token=${{ secrets.VERCEL_TOKEN }}
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+    
+    - name: ZAP Full Scan
+      uses: zaproxy/action-full-scan@v0.10.0
+      continue-on-error: true
+      with:
+        target: 'https://nextjs-boilerplate-mu-lilac-67.vercel.app/'
+        cmd_options: '-a -J report_json.json'
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload JSON Report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: zap-json-report
+        path: report_json.json
+        retention-days: 30
+    
+    - name: Convert JSON to SARIF
+      if: always() && success() || failure()
+      run: |
+        python scripts/convert_zap_to_sarif.py report_json.json zap_results.sarif
+      env:
+        REPO_ROOT: "file://${{ github.workspace }}/"
+    
+    - name: Fix SARIF URIs
+      if: always() && success() || failure()
+      run: |
+        # Crear un archivo de placeholder para vincular los resultados
+        mkdir -p placeholder
+        echo "<!-- Application placeholder for ZAP scan results -->" > placeholder/index.html
+        echo "# ZAP Security Scan Results" > placeholder/README.md
+        
+        # Corregir las URIs en el archivo SARIF
+        python -c "
+        import json
+        import sys
+        
+        with open('zap_results.sarif', 'r') as f:
+            sarif = json.load(f)
+        
+        # Asegurar que todas las URIs usen el esquema 'file://'
+        for run in sarif.get('runs', []):
+            for artifact in run.get('artifacts', []):
+                if 'location' in artifact and 'uri' in artifact['location']:
+                    if artifact['location']['uri'].startswith('http'):
+                        artifact['location']['uri'] = 'placeholder/index.html'
+            
+            for result in run.get('results', []):
+                for location in result.get('locations', []):
+                    phys_loc = location.get('physicalLocation', {})
+                    if 'artifactLocation' in phys_loc:
+                        if phys_loc['artifactLocation'].get('uri', '').startswith('http'):
+                            phys_loc['artifactLocation']['uri'] = 'placeholder/index.html'
+        
+        with open('zap_results.sarif', 'w') as f:
+            json.dump(sarif, f, indent=2)
+        
+        print('SARIF file fixed')
+        "
+    
+    - name: Validate SARIF
+      if: always() && success() || failure()
+      run: |
+        python -c "
+        import json
+        
+        try:
+            with open('zap_results.sarif', 'r') as f:
+                sarif = json.load(f)
+            
+            print('SARIF validation:')
+            print(f\"  Version: {sarif.get('version')}\")
+            print(f\"  Runs: {len(sarif.get('runs', []))}\")
+            
+            for i, run in enumerate(sarif.get('runs', [])):
+                print(f\"  Run {i+1}:\")
+                print(f\"    Tool: {run.get('tool', {}).get('driver', {}).get('name', 'Unknown')}\")
+                print(f\"    Results: {len(run.get('results', []))}\")
+                
+                # Verificar helpUri
+                for rule in run.get('tool', {}).get('driver', {}).get('rules', []):
+                    help_uri = rule.get('helpUri', '')
+                    if isinstance(help_uri, str) and '<p>' in help_uri:
+                        print(f\"    WARNING: Invalid helpUri found: {help_uri[:50]}...\")
+        
+        except Exception as e:
+            print(f'Error validating SARIF: {e}')
+        "
+    
+    - name: Upload SARIF to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v4
+      if: always() && success() || failure()
+      continue-on-error: true  # Continuar incluso si falla la subida
+      with:
+        sarif_file: zap_results.sarif
+        category: owasp-zap
+        checkout_path: ${{ github.workspace }}
+    
+    - name: Upload SARIF Report as artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: zap-sarif-report
+        path: |
+          zap_results.sarif
+          placeholder/
+        retention-days: 30
+    
+    - name: Generate Summary
+      if: always()
+      run: |
+        echo "=== ZAP Scan Summary ==="
+        if [ -f zap_results.sarif ]; then
+          python -c "
+          import json
+          try:
+              with open('zap_results.sarif', 'r') as f:
+                  data = json.load(f)
+              
+              total = 0
+              for run in data.get('runs', []):
+                  results = run.get('results', [])
+                  total += len(results)
+                  print(f'Total findings: {len(results)}')
+                  
+                  # Contar por severidad
+                  severities = {'error': 0, 'warning': 0, 'note': 0}
+                  for result in results:
+                      level = result.get('level', 'warning')
+                      severities[level] = severities.get(level, 0) + 1
+                  
+                  print(f'  - Error: {severities[\"error\"]}')
+                  print(f'  - Warning: {severities[\"warning\"]}')
+                  print(f'  - Note: {severities[\"note\"]}')
+                  
+          except Exception as e:
+              print(f'Error reading results: {e}')
+          "
+        else:
+          echo "No SARIF file generated"
+        
+        echo "======================="
