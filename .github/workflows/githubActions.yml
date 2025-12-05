@@ -137,37 +137,16 @@ jobs:
           placeholder/
         retention-days: 30
     
-    - name: Generate Summary
+    - name: Normalize ZAP Report
       if: always()
-      run: |
-        echo "=== ZAP Scan Summary ==="
-        if [ -f zap_results.sarif ]; then
-          python -c "
-          import json
-          try:
-              with open('zap_results.sarif', 'r') as f:
-                  data = json.load(f)
-              
-              total = 0
-              for run in data.get('runs', []):
-                  results = run.get('results', [])
-                  total += len(results)
-                  print(f'Total findings: {len(results)}')
-                  
-                  # Contar por severidad
-                  severities = {'error': 0, 'warning': 0, 'note': 0}
-                  for result in results:
-                      level = result.get('level', 'warning')
-                      severities[level] = severities.get(level, 0) + 1
-                  
-                  print(f'  - Error: {severities[\"error\"]}')
-                  print(f'  - Warning: {severities[\"warning\"]}')
-                  print(f'  - Note: {severities[\"note\"]}')
-                  
-          except Exception as e:
-              print(f'Error reading results: {e}')
-          "
-        else:
-          echo "No SARIF file generated"
-        
-        echo "======================="
+      run: python scripts/normalize_zap_report.py
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+    - name: Upload Normalized Report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: normalized-report
+        path: normalized_report.json
+        retention-days: 30
